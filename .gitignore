@@ -1,0 +1,15 @@
+# Variables de entorno — NUNCA subir al repo
+backend/.env
+.env
+
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# n8n
+.n8n/
