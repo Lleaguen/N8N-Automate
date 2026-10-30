@@ -1,0 +1,46 @@
+{
+  "hash": "e74d03c1",
+  "configHash": "42ba4bd4",
+  "lockfileHash": "87b26ba9",
+  "browserHash": "2db2c338",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "1b0c40f8",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "eae2b326",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "80f7bcea",
+      "needsInterop": true
+    },
+    "@weldjs/react": {
+      "src": "../../node_modules/@weldjs/react/dist/index.js",
+      "file": "@weldjs_react.js",
+      "fileHash": "e4750fce",
+      "needsInterop": false
+    },
+    "zod": {
+      "src": "../../node_modules/zod/index.js",
+      "file": "zod.js",
+      "fileHash": "0451220d",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-32E4H3EV": {
+      "file": "chunk-32E4H3EV.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
+}

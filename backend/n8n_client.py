@@ -34,14 +34,17 @@ async def get_workflow(workflow_id: str):
 
 
 async def activate_workflow(workflow_id: str, active: bool):
+    endpoint = "activate" if active else "deactivate"
     async with httpx.AsyncClient() as client:
-        response = await client.patch(
-            f"{N8N_BASE_URL}/api/v1/workflows/{workflow_id}",
+        response = await client.post(
+            f"{N8N_BASE_URL}/api/v1/workflows/{workflow_id}/{endpoint}",
             headers=headers,
-            json={"active": active},
         )
         response.raise_for_status()
-        return response.json()
+        # n8n devuelve body vacío en algunos casos
+        if response.content:
+            return response.json()
+        return {"success": True}
 
 
 async def execute_workflow(workflow_id: str, data: dict = {}):
@@ -79,7 +82,9 @@ async def execute_workflow(workflow_id: str, data: dict = {}):
                 },
             )
         response.raise_for_status()
-        return response.json()
+        if response.content:
+            return response.json()
+        return {"success": True, "message": "Workflow ejecutado correctamente"}
 
 
 async def get_executions(workflow_id: str = None):
