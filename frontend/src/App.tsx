@@ -178,7 +178,21 @@ function ChatPage() {
                   ⚡ Claude
                 </div>
               )}
-              {msg.content}
+              {msg.content.split(/(\*\*\[.*?\]\(.*?\)\*\*)/).map((part, i) => {
+                const match = part.match(/\*\*\[(.*?)\]\((.*?)\)\*\*/)
+                if (match) {
+                  return (
+                    <a key={i} href={match[2]} target="_blank" rel="noopener noreferrer"
+                      style={{
+                        color: '#00d4ff', fontWeight: 700,
+                        textDecoration: 'underline', cursor: 'pointer'
+                      }}>
+                      ⬇ {match[1]}
+                    </a>
+                  )
+                }
+                return <span key={i}>{part}</span>
+              })}
             </div>
           </div>
         ))}

@@ -59,13 +59,20 @@ async def execute_workflow(workflow_id: str, data: dict = {}):
 
     async with httpx.AsyncClient() as client:
         if webhook_node:
-            # Ejecutar via webhook (confiable)
             path = webhook_node.get("parameters", {}).get("path", workflow_id)
-            response = await client.post(
-                f"{N8N_BASE_URL}/webhook/{path}",
-                headers={"Content-Type": "application/json"},
-                json=data,
-            )
+            method = webhook_node.get("parameters", {}).get("httpMethod", "GET").upper()
+
+            if method == "GET":
+                response = await client.get(
+                    f"{N8N_BASE_URL}/webhook/{path}",
+                    params=data if data else {},
+                )
+            else:
+                response = await client.post(
+                    f"{N8N_BASE_URL}/webhook/{path}",
+                    headers={"Content-Type": "application/json"},
+                    json=data,
+                )
         else:
             # Fallback: endpoint interno para manual trigger
             response = await client.post(

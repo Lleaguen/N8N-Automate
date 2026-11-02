@@ -85,6 +85,11 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
 
 import claude_client
+import trackeo
+from fastapi.responses import StreamingResponse, FileResponse
+import io
+import os
+import tempfile
 
 @app.post("/chat")
 async def chat(body: ChatRequest):
@@ -94,3 +99,31 @@ async def chat(body: ChatRequest):
         return {"reply": reply}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/trackeo")
+async def ejecutar_trackeo():
+    try:
+        excel_bytes = await trackeo.ejecutar_trackeo()
+        return StreamingResponse(
+            io.BytesIO(excel_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=trackeo_pss.xlsx"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/download/{filename}")
+async def download_file(filename: str):
+    # Solo permite descargar archivos temporales de trackeo
+    if not filename.startswith("trackeo_pss_") or not filename.endswith(".xlsx"):
+        raise HTTPException(status_code=403, detail="Archivo no permitido")
+    tmp_path = os.path.join(tempfile.gettempdir(), filename)
+    if not os.path.exists(tmp_path):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    return FileResponse(
+        tmp_path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="trackeo_pss.xlsx"
+    )

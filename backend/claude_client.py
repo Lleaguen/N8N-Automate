@@ -8,26 +8,70 @@ load_dotenv()
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-SYSTEM_PROMPT = """Sos un asistente experto en automatizaciones con n8n.
-El usuario te va a describir en lenguaje natural qué automatización quiere crear o modificar.
+SYSTEM_PROMPT = f"""Sos un asistente experto en automatizaciones con n8n.
+El usuario te va a describir en lenguaje natural qué automatización quiere crear o modificar,
+y vos tenés que crear o modificar el workflow directamente en n8n.
 
-Tenés acceso a las siguientes herramientas para interactuar con n8n:
+== CONTEXTO DEL ENTORNO ==
+- Backend Python corriendo en: http://127.0.0.1:8000
+- URL del sheet de Pendientes (Shipments): {os.getenv("PENDIENTES_URL", "no configurada")}
+- URL del sheet de PSS: {os.getenv("PSS_URL", "no configurada aún")}
 
-1. list_workflows   - Lista todos los workflows existentes
-2. create_workflow  - Crea un nuevo workflow en n8n
-3. update_workflow  - Modifica un workflow existente (nodos, conexiones, nombre)
-4. activate_workflow - Activa o desactiva un workflow por ID
-5. execute_workflow - Ejecuta un workflow por ID
+== CONTEXTO DEL NEGOCIO: TRACKEO PSS ==
 
-Cuando el usuario te pida MODIFICAR un workflow existente, usá update_workflow con su ID.
-NO crees uno nuevo si el usuario quiere modificar uno que ya existe.
+PSS = Piezas Sin Shipment. Productos físicos en el hub sin número de shipment.
+Shipments Pendientes = órdenes pendientes que podrían corresponder a esas piezas.
 
-Cuando crees o modifiques workflows, siempre usá un nodo Webhook como trigger
-para que puedan ejecutarse remotamente. El path del webhook debe ser descriptivo
-y en minúsculas con guiones, por ejemplo: "bienvenida", "procesar-email", etc.
+ESTRUCTURA DEL SHEET DE PENDIENTES:
+Columnas A-R: id, Fecha Inhub, Dia, Sem, Carrier LM, Carrier LM2, Hub Status, TMS Status,
+Respuesta, $, Sin Manifestar, Recupero, Fecha Recupero, Descripciones, Motivo de Recupero,
+Flujo, Observaciones, Cierre
+
+ESTRUCTURA DEL SHEET DE PSS:
+Columnas A-K: SHIPMENT, Codigo, Semana, Fecha, Salida a Jaula, Mes, Descripcion, Marca,
+Observacion, Imagen, Corroboracion de Datos
+
+CRITERIOS DE MATCHING:
+1. DESCRIPCIÓN: palabras clave ignorando stopwords, sinónimos, por categoría
+2. MARCA: determinante cuando descripción es ambigua
+3. FECHA: misma semana o hasta 2 semanas atrás; diferencia máxima 2 días entre Fecha Inhub y Fecha PSS
+4. PRECIO >$65.000: coincidencia mínima 85-100%. PRECIO ≤$65.000: mínimo 60% por categoría
+
+== HERRAMIENTAS DISPONIBLES ==
+Tenés acceso a: list_workflows, create_workflow, update_workflow, activate_workflow,
+execute_workflow, run_trackeo
+
+Para ejecutar el trackeo PSS usá run_trackeo directamente — no hace falta crear un workflow.
+
+== CÓMO CONSTRUIR WORKFLOWS EN N8N ==
+
+Estructura de nodo:
+{{
+  "id": "id-unico", "name": "Nombre", "type": "tipo",
+  "typeVersion": 1, "position": [x, y], "parameters": {{...}}
+}}
+
+Conexiones:
+{{"Nodo Origen": {{"main": [[{{"node": "Nodo Destino", "type": "main", "index": 0}}]]}}}}
+
+TIPOS DE NODOS:
+- Webhook trigger: n8n-nodes-base.webhook v2 | params: httpMethod, path, responseMode
+- HTTP Request: n8n-nodes-base.httpRequest v4.2 | params: method, url, sendBody, contentType
+- Code (JS): n8n-nodes-base.code v2 | params: jsCode
+- Set: n8n-nodes-base.set v3.4 | params: assignments
+- Respond to Webhook: n8n-nodes-base.respondToWebhook v1.1 | params: respondWith, responseBody
+- Gmail: n8n-nodes-base.gmail v2.1 | params: operation, sendTo, subject, message
+- Merge: n8n-nodes-base.merge v3 | params: mode, combineBy
+
+Posicionamiento: nodos de izquierda a derecha con 250px. Ramas paralelas: misma X, Y separado 200px.
+
+== REGLAS ==
+1. Para MODIFICAR un workflow existente usá update_workflow. No crees uno nuevo.
+2. Siempre usá Webhook como trigger.
+3. Explicá en español qué hiciste.
+4. Si necesita credenciales (Gmail), avisá que las configure en n8n Settings → Credentials.
 
 Siempre respondé en español y de forma clara y concisa.
-Cuando hagas algo en n8n, explicá qué hiciste y por qué.
 """
 
 TOOLS = [
@@ -74,7 +118,7 @@ TOOLS = [
                 },
                 "name": {
                     "type": "string",
-                    "description": "Nuevo nombre del workflow (opcional, mantiene el actual si no se especifica)"
+                    "description": "Nuevo nombre del workflow (opcional)"
                 },
                 "nodes": {
                     "type": "array",
@@ -124,6 +168,15 @@ TOOLS = [
             "required": ["workflow_id"]
         }
     },
+    {
+        "name": "run_trackeo",
+        "description": "Ejecuta el trackeo de PSS contra los shipments pendientes. Lee ambos Google Sheets, aplica el criterio del documento en tiempo real, hace el matching con IA y genera un archivo Excel descargable.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
 ]
 
 
@@ -171,6 +224,21 @@ async def execute_tool(tool_name: str, tool_input: dict) -> str:
             )
             return f"Workflow ejecutado. Resultado: {json.dumps(result)}"
 
+        elif tool_name == "run_trackeo":
+            import trackeo
+            import tempfile
+            excel_bytes = await trackeo.ejecutar_trackeo()
+            tmp = tempfile.NamedTemporaryFile(
+                delete=False, suffix=".xlsx", prefix="trackeo_pss_"
+            )
+            tmp.write(excel_bytes)
+            tmp.close()
+            filename = os.path.basename(tmp.name)
+            return (
+                f"✅ Trackeo completado. "
+                f"**[Descargar trackeo_pss.xlsx](http://127.0.0.1:8000/download/{filename})**"
+            )
+
         else:
             return f"Herramienta desconocida: {tool_name}"
 
@@ -191,7 +259,6 @@ async def chat(messages: list) -> str:
         messages=messages
     )
 
-    # Bucle de herramientas: Claude puede usar varias en secuencia
     while response.stop_reason == "tool_use":
         tool_uses = [b for b in response.content if b.type == "tool_use"]
         tool_results = []
@@ -204,7 +271,6 @@ async def chat(messages: list) -> str:
                 "content": result
             })
 
-        # Continuamos la conversación con los resultados de las herramientas
         messages = messages + [
             {"role": "assistant", "content": response.content},
             {"role": "user",      "content": tool_results}
@@ -218,6 +284,5 @@ async def chat(messages: list) -> str:
             messages=messages
         )
 
-    # Extraemos el texto final
     text_blocks = [b.text for b in response.content if hasattr(b, "text")]
     return "\n".join(text_blocks)
